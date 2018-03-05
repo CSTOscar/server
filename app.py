@@ -11,7 +11,7 @@ sys.path.append(os.path.abspath('../models/research'))
 sys.path.append(os.path.abspath('../models/research/slim'))
 from main.main import setup, main
 
-NUM_STEPS = 30
+NUM_STEPS = 10
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -75,12 +75,22 @@ def capture(data):
         images[step] = dict()
     arr = np.fromstring(base64.b64decode(data['image']), np.uint8)
     image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    cv2.imwrite('images/image_{}_{}.jpg'.format(data['side'],data['step']), image)  
+    # cv2.imwrite('images/image_{}_{}.jpg'.format(data['side'],data['step']), image)  
     images[step][data['side']] = image
     cnt.value += 1
     if cnt.value == 2 * NUM_STEPS:
         done()
 
+
+# @sio.on('recognitionRequest')
+# def recognitionRequest():
+#     print('Recognition Request')
+#     if 'data' in json_data.keys():
+#         print('Error')
+#         emit('error', {'error': 'No Recognition Data'}, json=True)
+#     else:
+#         print('Recognition Data Sent.')
+#         emit('recognised', json_data, json=True, broadcast=True);
 
 def done():
     imageL = list()
@@ -90,8 +100,7 @@ def done():
         imageR.append(images[i]['right'])
     setup()
     json_data = main(imageL, imageR)
-    sio.emit('recongised', json_data, broadcast=True)
-    print(json_data)
+    emit('recognised', json_data, json=True, broadcast=True)
 
 
 if __name__ == "__main__":
