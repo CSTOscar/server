@@ -1,12 +1,15 @@
 from flask import Flask, render_template, session
 from flask_socketio import SocketIO, send, emit
+from multiprocessing import Value
 from datetime import datetime, timedelta 
 from uuid import uuid4
-# from io import BytesIO
-# from PIL import Image
-import numpy as np
-import cv2
-import base64
+import numpy as np, cv2, base64, sys, os
+
+sys.path.append(os.path.abspath('../AbsoluteObject3DMap'))
+sys.path.append(os.path.abspath('../models'))
+sys.path.append(os.path.abspath('../models/research'))
+sys.path.append(os.path.abspath('../models/research/slim'))
+from main.main import setup, main
 
 NUM_STEPS = 30
 
@@ -16,7 +19,7 @@ sio = SocketIO(app)
 
 cameras = dict()
 images = dict()
-cnt = 0
+cnt = Value('i', 0)
 
 
 @sio.on('start')
@@ -39,6 +42,7 @@ def start():
 def ready():
     print(cameras)
     if len(cameras) == 2:
+        cnt.value = 0
         emit('startRecording', {
             'time': (datetime.utcnow() + timedelta(seconds=2)).isoformat(),
             'interval': 250, # in ms
@@ -69,12 +73,12 @@ def capture(data):
     step = int(data['step'])
     if data['step'] not in images.keys():
         images[step] = dict()
-    arr = np.fromstring(base64.b64decode(data['image'], np.uint8)
+    arr = np.fromstring(base64.b64decode(data['image']), np.uint8)
     image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    cv2.imwrite('image_{}_{}.jpg'.format(data['side'],data['step']), image)  
+    cv2.imwrite('images/image_{}_{}.jpg'.format(data['side'],data['step']), image)  
     images[step][data['side']] = image
-    cnt += 1
-    if cnt == 2 * NUM_STEPS:
+    cnt.value += 1
+    if cnt.value == 2 * NUM_STEPS:
         done()
 
 
@@ -84,7 +88,11 @@ def done():
     for i in range(0, NUM_STEPS):
         imageL.append(images[i]['left'])
         imageR.append(images[i]['right'])
-    
+    setup()
+    json_data = main(imageL, imageR)
+    sio.emit('recongised', json_data, broadcast=True)
+    print(json_data)
+
 
 if __name__ == "__main__":
     sio.run(app, '0.0.0.0', 8000, use_reloader=True, log_output=True) 
